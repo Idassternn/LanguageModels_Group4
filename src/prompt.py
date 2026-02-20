@@ -9,6 +9,10 @@ import os
 import pickle
 import torch
 
+from codecarbon import EmissionsTracker
+tracker = EmissionsTracker()
+
+
 # from model import GPT, GPTConfig
 ############################## FROM MODEL ###############################
 import math
@@ -190,6 +194,8 @@ class GPT(nn.Module):
 # ----------------------------
 # Edit these
 # ----------------------------
+tracker.start()
+
 BASE_DIR = r"C:\Users\IdaSS\OneDrive\DOKUMENTER 23-20-2020\1 - DTU\F26\Quantitative methods to assess sustainability"
 OUT_DIR = os.path.join(BASE_DIR, "out")
 # DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -247,3 +253,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+tracker.stop()

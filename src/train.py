@@ -15,6 +15,7 @@ from dataclasses import asdict
 
 import numpy as np
 import torch
+from codecarbon import EmissionsTracker
 
 # from model import GPTConfig, GPT
 
@@ -307,6 +308,15 @@ def main():
     # print(f"Model parameters: {model.get_num_params():,}")
     # print(f"Training for {MAX_ITERS} iterations | batch={BATCH_SIZE} | block={BLOCK_SIZE}")
 
+    # Initialize CodeCarbon emissions tracker
+    tracker = EmissionsTracker(
+        project_name="slm-sustainability-training",
+        output_dir=OUT_DIR,
+        log_level="warning"
+    )
+    tracker.start()
+    print("Carbon tracking started...")
+
     t0 = time.time()
     for it in range(MAX_ITERS + 1):
         # periodic evaluation
@@ -348,6 +358,11 @@ def main():
             print(f"iter {it:5d} | loss {loss.item():.4f}")
 
     print("Training completed.")
+
+    # Stop carbon tracking
+    emissions = tracker.stop()
+    print(f"\nTotal emissions: {emissions:.6f} kg CO2eq")
+    print(f"Emissions report saved to: {OUT_DIR}")
 
     # Save final checkpoint
     if SAVE_CHECKPOINT:
