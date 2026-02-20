@@ -13,7 +13,9 @@ import pickle
 import numpy as np
 from urllib.request import urlopen
 
-DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+# Base directory for the project
+BASE_DIR = r"C:\Users\IdaSS\OneDrive\DOKUMENTER 23-20-2020\1 - DTU\F26\Quantitative methods to assess sustainability"
+DATA_DIR = os.path.join(BASE_DIR, "data")
 INPUT_FILE = os.path.join(DATA_DIR, "input.txt")
 DATA_URL = "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
 
