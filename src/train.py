@@ -15,8 +15,16 @@ from dataclasses import asdict
 
 import numpy as np
 import torch
+import sys
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+sys.path.append(os.path.join(PROJECT_ROOT, "src"))
+
 
 from model import GPTConfig, GPT
+
+
 
 # -----------------------------------------------------------------------------
 # Experiment configuration
@@ -59,6 +67,8 @@ def load_meta(data_dir: str):
         return None
     with open(meta_path, "rb") as f:
         return pickle.load(f)
+
+
 
 def get_batch(split: str, data_dir: str, block_size: int, batch_size: int, device: str):
     # simple, robust memmap loader
