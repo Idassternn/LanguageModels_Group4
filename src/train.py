@@ -18,7 +18,7 @@ import torch
 import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
+os.chdir(PROJECT_ROOT)
 sys.path.append(os.path.join(PROJECT_ROOT, "src"))
 
 
