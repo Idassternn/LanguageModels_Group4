@@ -17,7 +17,7 @@ from model import GPT, GPTConfig
 OUT_DIR = "out"
 CKPT_PATH = os.path.join(OUT_DIR, "ckpt.pt")
 
-PROMPT = "To be, or not to be"
+PROMPT = "Hello"
 MAX_NEW_TOKENS = 200
 TEMPERATURE = 1.0
 TOP_K = 50
