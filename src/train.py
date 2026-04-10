@@ -7,15 +7,17 @@ Focus:
 
 Source: https://github.com/karpathy/nanoGPT
 """
-
+#%%
 import os
 import time
 import pickle
 from dataclasses import asdict
+import pandas as pd
 
 import numpy as np
 import torch
 import sys
+from codecarbon import OfflineEmissionsTracker
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(PROJECT_ROOT)
@@ -38,9 +40,9 @@ LOG_INTERVAL = 50
 SAVE_CHECKPOINT = True
 
 # Model (main tunables)
-N_LAYER = 4
-N_HEAD = 4
-N_EMBD = 128
+N_LAYER = 1
+N_HEAD = 1
+N_EMBD = 16
 DROPOUT = 0.1
 BIAS = True
 
@@ -50,7 +52,7 @@ DEVICE = "cpu"          # If you can, try also seeing consumption when using gpu
 DTYPE = "float32"       
 BATCH_SIZE = 32         # Number of sequences processed in parallel.
 BLOCK_SIZE = 256        # Maximum context length for predictions (e.g. 128 or 256). The longer the block size, the more memory and compute it requires, but it can also lead to better performance.
-MAX_ITERS = 2000        # Total number of training iterations. The more iterations, the better the model can perform, but it also takes more time and energy to train.
+MAX_ITERS = 500        # Total number of training iterations. The more iterations, the better the model can perform, but it also takes more time and energy to train.
 LEARNING_RATE = 3e-4    # the standard starting learning rate, often good enough for a first try
 WEIGHT_DECAY = 0.1      # L2 Regularization
 GRAD_CLIP = 1.0         # To prevent exploding gradients
@@ -70,10 +72,12 @@ def load_meta(data_dir: str):
 
 
 
-def get_batch(split: str, data_dir: str, block_size: int, batch_size: int, device: str):
-    # simple, robust memmap loader
+def get_batch(split: str, data_dir: str, block_size: int, batch_size: int, device: str, max_tokens=None):
     bin_path = os.path.join(data_dir, f"{split}.bin")
     data = np.memmap(bin_path, dtype=np.uint16, mode="r")
+
+    if max_tokens is not None:
+        data = data[:max_tokens]
 
     ix = torch.randint(len(data) - block_size - 1, (batch_size,))
     x = torch.stack([torch.from_numpy((data[i : i + block_size]).astype(np.int64)) for i in ix])
@@ -84,13 +88,13 @@ def get_batch(split: str, data_dir: str, block_size: int, batch_size: int, devic
     return x, y
 
 @torch.no_grad()
-def estimate_loss(model: GPT, data_dir: str, block_size: int, batch_size: int, device: str, eval_iters: int):
+def estimate_loss(model: GPT, data_dir: str, block_size: int, batch_size: int, device: str, eval_iters: int, max_tokens=None):
     model.eval()
     losses = {}
     for split in ["train", "val"]:
         split_losses = torch.zeros(eval_iters, device=device)
         for k in range(eval_iters):
-            x, y = get_batch(split, data_dir, block_size, batch_size, device)
+            x, y = get_batch(split, data_dir, block_size, batch_size, device, max_tokens)
             _, loss = model(x, y)
             split_losses[k] = loss
         losses[split] = split_losses.mean().item()
@@ -107,7 +111,19 @@ def save_checkpoint(out_dir: str, model: GPT, optimizer: torch.optim.Optimizer, 
     }
     torch.save(ckpt, os.path.join(out_dir, "ckpt.pt"))
 
-def main():
+def main(country="DNK", N_layer=N_LAYER, max_tokens=None):
+
+    os.makedirs("out/emissions", exist_ok=True)
+
+    tracker = OfflineEmissionsTracker(
+        project_name="gpt-training",
+        country_iso_code=country,
+        output_dir="out/emissions",
+        measure_power_secs=10,
+        log_level="error"
+    )
+
+    tracker.start()
     os.makedirs(OUT_DIR, exist_ok=True)
     set_seed(SEED)
 
@@ -117,7 +133,7 @@ def main():
     cfg = GPTConfig(
         block_size=BLOCK_SIZE,
         vocab_size=vocab_size,
-        n_layer=N_LAYER,
+        n_layer=N_layer,
         n_head=N_HEAD,
         n_embd=N_EMBD,
         dropout=DROPOUT,
@@ -135,10 +151,10 @@ def main():
         betas=(0.9, 0.95),
     )
 
-    # (optional) uncomment this for printing model size once
-    # print(f"Device: {DEVICE}")
-    # print(f"Model parameters: {model.get_num_params():,}")
-    # print(f"Training for {MAX_ITERS} iterations | batch={BATCH_SIZE} | block={BLOCK_SIZE}")
+    #(optional) uncomment this for printing model size once
+    print(f"Device: {DEVICE}")
+    print(f"Model parameters: {model.get_num_params():,}")
+    print(f"Training for {MAX_ITERS} iterations | batch={BATCH_SIZE} | block={BLOCK_SIZE}")
 
     t0 = time.time()
     for it in range(MAX_ITERS + 1):
@@ -166,7 +182,7 @@ def main():
                 save_checkpoint(OUT_DIR, model, optimizer, it, config_dump)
 
         # training step
-        x, y = get_batch("train", DATA_DIR, BLOCK_SIZE, BATCH_SIZE, DEVICE)
+        x, y = get_batch("train", DATA_DIR, BLOCK_SIZE, BATCH_SIZE, DEVICE, max_tokens)
         _, loss = model(x, y)
 
         optimizer.zero_grad(set_to_none=True)
@@ -199,6 +215,109 @@ def main():
             "model": asdict(cfg),
         }
         save_checkpoint(OUT_DIR, model, optimizer, MAX_ITERS, config_dump)
+    
+    tracker.stop()
+    data = tracker.final_emissions_data
 
-if __name__ == "__main__":
-    main()
+    return {
+        "emissions": data.emissions,
+        "energy": data.energy_consumed,
+        "time": data.duration}
+
+#if __name__ == "__main__":
+#    main()
+
+
+#%%###################################
+# COUNTRY SCENARIOS
+######################################
+
+countries = ["DNK", "FRA", "POL"]
+
+rows = []
+
+for country in countries:
+    print(f"\n===== Running country: {country} =====")
+
+    start = time.time()
+    result = main(country=country, N_layer=N_LAYER)
+    runtime = time.time() - start
+
+    # unpack returned dictionary
+    emissions = result["emissions"]
+    energy = result["energy"]
+    model_time = result["time"]
+
+    rows.append({
+        "country": country,
+        "layers": 2,
+        "emissions_kg": emissions,
+        "energy_kWh": energy,
+        "runtime_sec": runtime
+    })
+
+df_countries = pd.DataFrame(rows)
+print(df_countries)
+
+#%%###################################
+# LAYER SCENARIOS
+######################################
+
+layer_rows = []
+
+for layers in range(1, 6):
+    print(f"\n===== Running layers: {layers} =====")
+
+    start = time.time()
+    result = main(country="DNK", N_layer=layers)
+    runtime = time.time() - start
+
+    # unpack cleanly
+    emissions, energy, model_time = (
+        result["emissions"],
+        result["energy"],
+        result["time"]
+    )
+
+    layer_rows.append({
+        "country": "DNK",
+        "layers": layers,
+        "emissions_kg": emissions,
+        "energy_kWh": energy,
+        "runtime_sec": runtime
+    })
+
+df_layers = pd.DataFrame(layer_rows)
+print(df_layers)
+
+#%%###################################
+# TOKEN SCENARIOS
+######################################
+
+token_sizes = [
+    100_000,
+    500_000,
+    1_000_000,
+    2_000_000,
+    None
+]
+
+rows = []
+
+for tokens in token_sizes:
+    print(f"\n===== Running tokens: {tokens} =====")
+
+    start = time.time()
+    result = main(country="DNK", N_layer=N_LAYER, max_tokens=tokens)
+    runtime = time.time() - start
+
+    rows.append({
+        "tokens": tokens,
+        "emissions_kg": result["emissions"],
+        "energy_kWh": result["energy"],
+        "runtime_sec": runtime
+    })
+
+df_tokens = pd.DataFrame(rows)
+print(df_tokens)
+# %%
