@@ -40,9 +40,9 @@ LOG_INTERVAL = 50
 SAVE_CHECKPOINT = True
 
 # Model (main tunables)
-N_LAYER = 1
-N_HEAD = 1
-N_EMBD = 16
+N_LAYER = 2
+N_HEAD = 4
+N_EMBD = 128
 DROPOUT = 0.1
 BIAS = True
 
@@ -52,7 +52,7 @@ DEVICE = "cpu"          # If you can, try also seeing consumption when using gpu
 DTYPE = "float32"       
 BATCH_SIZE = 32         # Number of sequences processed in parallel.
 BLOCK_SIZE = 256        # Maximum context length for predictions (e.g. 128 or 256). The longer the block size, the more memory and compute it requires, but it can also lead to better performance.
-MAX_ITERS = 500        # Total number of training iterations. The more iterations, the better the model can perform, but it also takes more time and energy to train.
+MAX_ITERS = 2000        # Total number of training iterations. The more iterations, the better the model can perform, but it also takes more time and energy to train.
 LEARNING_RATE = 3e-4    # the standard starting learning rate, often good enough for a first try
 WEIGHT_DECAY = 0.1      # L2 Regularization
 GRAD_CLIP = 1.0         # To prevent exploding gradients
@@ -320,4 +320,59 @@ for tokens in token_sizes:
 
 df_tokens = pd.DataFrame(rows)
 print(df_tokens)
+
+#%%###################################
+# DATASET FRACTION SCENARIOS
+######################################
+
+fractions = [10, 25, 50, 75, 100]
+
+dataset_rows = []
+
+for frac in fractions:
+    print(f"\n===== Running dataset: shakespeare_{frac} =====")
+
+    # 👇 just point to the dataset folder
+    DATA_DIR = os.path.join("data", f"shakespeare_{frac}")
+
+    start = time.time()
+    result = main(country="DNK", N_layer=N_LAYER)
+    runtime = time.time() - start
+
+    dataset_rows.append({
+        "dataset": f"{frac}%",
+        "emissions_kg": result["emissions"],
+        "energy_kWh": result["energy"],
+        "runtime_sec": runtime
+    })
+
+df_datasets = pd.DataFrame(dataset_rows)
+print(df_datasets)
+
+#%%###################################
+# ITERATION SCENARIOS
+######################################
+
+iteration_values = [500, 1000, 1500, 2000, 2500, 3000]
+
+iter_rows = []
+
+for iters in iteration_values:
+    print(f"\n===== Running iterations: {iters} =====")
+
+    MAX_ITERS = iters  # override global
+
+    start = time.time()
+    result = main(country="DNK", N_layer=N_LAYER)
+    runtime = time.time() - start
+
+    iter_rows.append({
+        "iterations": iters,
+        "emissions_kg": result["emissions"],
+        "energy_kWh": result["energy"],
+        "runtime_sec": runtime
+    })
+
+df_iterations = pd.DataFrame(iter_rows)
+print(df_iterations)
 # %%
